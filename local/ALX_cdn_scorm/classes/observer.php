@@ -1,5 +1,5 @@
 <?php
-namespace local_ALX_cdn_scorm;
+namespace local_alx_cdn_scorm;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -51,10 +51,10 @@ class observer {
             return;
         }
 
-        // Check if our fields are in the POST data.
-        // This is necessary because the event object doesn't carry the custom form fields.
-        $cdn_enabled = optional_param('local_ALX_cdn_enable', 0, PARAM_BOOL);
-        $cdn_url = optional_param('local_ALX_cdn_url', '', PARAM_RAW);
+        // Check if our fields are in the POST data
+        // Note: Field names must match form_hook (lowercase)
+        $cdn_enabled = optional_param('local_alx_cdn_enable', 0, PARAM_BOOL);
+        $cdn_url = optional_param('local_alx_cdn_url', '', PARAM_RAW);
         
         // SCORM ID
         $scormid = $data['objectid'];
@@ -72,8 +72,6 @@ class observer {
             $record->id = $existing->id;
             $DB->update_record('local_alx_cdn_scorm', $record);
         } else {
-            // Only create if enabled or content is present, to keep DB clean?
-            // User might have enabled it.
             if ($cdn_enabled || !empty($cdn_url)) {
                 $record->timecreated = time();
                 $DB->insert_record('local_alx_cdn_scorm', $record);
