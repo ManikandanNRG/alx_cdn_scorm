@@ -71,8 +71,6 @@ if (stripos($scorm_url, 'imsmanifest.xml') !== false) {
     }
 }
 
-// ===== MISSING FEATURES IMPLEMENTATION =====
-
 // Get additional parameters (matching default player)
 $scoid = optional_param('scoid', 0, PARAM_INT);
 $mode = optional_param('mode', 'normal', PARAM_ALPHA);
@@ -172,24 +170,6 @@ if ($displaymode == 'popup') {
 $PAGE->set_url('/local/alx_cdn_scorm/player.php', array('scormid' => $scormid, 'cmid' => $cmid));
 $PAGE->set_context($context);
 
-// Instead of AMD, we'll use inline JavaScript for the bridge
-$bridge_params = [
-    'scormid' => $scorm->id,
-    'scoid' => $sco->id,  // Use validated SCO from TOC
-    'cmid' => $cm->id,
-    'attempt' => $attempt,  // Use validated attempt from scorm_check_mode
-    'mode' => $mode,  // Add mode parameter
-    'debug' => (bool)$debugmode,
-    'wwwroot' => $CFG->wwwroot,
-    'sesskey' => sesskey()
-];
-
-echo $OUTPUT->header();
-
-// Use proxy.php to fetch and inject API into SCORM content
-$proxy_url = $CFG->wwwroot . '/local/alx_cdn_scorm/proxy.php?scormid=' . $scormid . 
-             '&cmid=' . $cmid . '&scoid=' . $sco->id . '&url=' . urlencode($scorm_url);
-
 // Generate exit URL (matches default SCORM player logic)
 $exiturl = "";
 if (empty($scorm->popup) || $displaymode == 'popup') {
@@ -203,21 +183,75 @@ if (empty($scorm->popup) || $displaymode == 'popup') {
     }
 }
 
-$template_data = [
-    'scorm_name' => $scorm->name,
-    'iframe_src' => $proxy_url,
-    'width' => '100%',
-    'height' => '800px',
-    'exit_url' => $exiturl,  // Use calculated exit URL
-    // Bridge parameters for inline JavaScript
-    'bridge_scormid' => $bridge_params['scormid'],
-    'bridge_scoid' => $bridge_params['scoid'],
-    'bridge_cmid' => $bridge_params['cmid'],
-    'bridge_attempt' => $bridge_params['attempt'],
-    'bridge_debug' => $bridge_params['debug'] ? 'true' : 'false',
-    'bridge_wwwroot' => $bridge_params['wwwroot'],
-    'bridge_sesskey' => $bridge_params['sesskey']
-];
+echo $OUTPUT->header();
 
-echo $OUTPUT->render_from_template('local_alx_cdn_scorm/player_embed', $template_data);
+// Exit button should ONLY be displayed when NOT in popup mode (matches default player line 211)
+if ($displaymode !== 'popup') {
+    $renderer = $PAGE->get_renderer('mod_scorm');
+    echo $renderer->generate_exitbar($exiturl);
+}
+
+// Check if we need to open a popup window (matches default player lines 247-263)
+if ($result->prerequisites) {
+    if ($scorm->popup != 0 && $displaymode !== 'popup') {
+        // This is "New window" mode - open JavaScript popup
+        // Clean the name for the window as IE is fussy
+        $name = preg_replace("/[^A-Za-z0-9]/", "", $scorm->name);
+        if (!$name) {
+            $name = 'DefaultPlayerWindow';
+        }
+        $name = 'scorm_'.$name;
+        
+        echo html_writer::script('', $CFG->wwwroot.'/mod/scorm/player.js');
+        $url = new moodle_url($PAGE->url, array('scoid' => $sco->id, 'display' => 'popup', 'mode' => $mode));
+        echo html_writer::script(
+            js_writer::function_call('scorm_openpopup', Array($url->out(false),
+                                                       $name, $scorm->options,
+                                                       $scorm->width, $scorm->height)));
+        
+        // Show message that popup was launched
+        $linkcourse = html_writer::link($CFG->wwwroot.'/course/view.php?id='.
+                        $scorm->course, get_string('finishscormlinkname', 'scorm'));
+        echo $OUTPUT->box(get_string('finishscorm', 'scorm', $linkcourse), 'generalbox', 'altfinishlink');
+    } else {
+        // This is "Current window" or "Popup" mode - embed the SCORM
+        $proxy_url = $CFG->wwwroot . '/local/alx_cdn_scorm/proxy.php?scormid=' . $scormid . 
+                     '&cmid=' . $cmid . '&scoid=' . $sco->id . '&url=' . urlencode($scorm_url);
+        
+        $bridge_params = [
+            'scormid' => $scorm->id,
+            'scoid' => $sco->id,
+            'cmid' => $cm->id,
+            'attempt' => $attempt,
+            'mode' => $mode,
+            'debug' => (bool)$debugmode,
+            'wwwroot' => $CFG->wwwroot,
+            'sesskey' => sesskey()
+        ];
+        
+        $template_data = [
+            'scorm_name' => $scorm->name,
+            'iframe_src' => $proxy_url,
+            'width' => '100%',
+            'height' => '800px',
+            'show_exit_button' => false,  // Exit button already shown above
+            // Bridge parameters for inline JavaScript
+            'bridge_scormid' => $bridge_params['scormid'],
+            'bridge_scoid' => $bridge_params['scoid'],
+            'bridge_cmid' => $bridge_params['cmid'],
+            'bridge_attempt' => $bridge_params['attempt'],
+            'bridge_debug' => $bridge_params['debug'] ? 'true' : 'false',
+            'bridge_wwwroot' => $bridge_params['wwwroot'],
+            'bridge_sesskey' => $bridge_params['sesskey']
+        ];
+        
+        echo $OUTPUT->render_from_template('local_alx_cdn_scorm/player_embed', $template_data);
+    }
+} else {
+    echo $OUTPUT->box(get_string('noprerequisites', 'scorm'));
+}
+
 echo $OUTPUT->footer();
+
+// Set the start time of this SCO (matches default player line 302)
+scorm_insert_track($USER->id, $scorm->id, $scoid, $attempt, 'x.start.time', time());
