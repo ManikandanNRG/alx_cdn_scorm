@@ -71,9 +71,52 @@ if (stripos($scorm_url, 'imsmanifest.xml') !== false) {
     }
 }
 
-// Identify SCO ID
+// ===== MISSING FEATURES IMPLEMENTATION =====
+
+// Get additional parameters (matching default player)
 $scoid = optional_param('scoid', 0, PARAM_INT);
-if ($scoid === 0) {
+$mode = optional_param('mode', 'normal', PARAM_ALPHA);
+$newattempt = optional_param('newattempt', 'off', PARAM_ALPHA);
+$currentorg = optional_param('currentorg', '', PARAM_RAW);
+$displaymode = optional_param('display', '', PARAM_ALPHA);
+
+// Validate currentorg against database
+if (!empty($currentorg)) {
+    if (!$DB->record_exists('scorm_scoes', array('scorm' => $scorm->id, 'identifier' => $currentorg))) {
+        $currentorg = '';
+    }
+}
+
+// Get last attempt
+$attempt = scorm_get_last_attempt($scorm->id, $USER->id);
+
+// Check mode and validate attempt (this handles resume/restart logic)
+scorm_check_mode($scorm, $newattempt, $attempt, $USER->id, $mode);
+
+// Check if activity is hidden
+if (!$cm->visible and !has_capability('moodle/course:viewhiddenactivities', $context)) {
+    echo $OUTPUT->header();
+    notice(get_string("activityiscurrentlyhidden"));
+    echo $OUTPUT->footer();
+    die;
+}
+
+// Check SCORM availability (dates, attempts, etc.)
+require_once($CFG->libdir . '/completionlib.php');
+list($available, $warnings) = scorm_get_availability_status($scorm);
+if (!$available) {
+    $reason = current(array_keys($warnings));
+    echo $OUTPUT->header();
+    echo $OUTPUT->box(get_string($reason, "scorm", $warnings[$reason]), "generalbox boxaligncenter");
+    echo $OUTPUT->footer();
+    die;
+}
+
+// Validate and get SCO
+if (!empty($scoid)) {
+    $scoid = scorm_check_launchable_sco($scorm, $scoid);
+} else {
+    // Get first launchable SCO
     $scoes = $DB->get_records_select('scorm_scoes', 'scorm = ? AND launch <> ?', array($scorm->id, ''), 'sortorder', 'id', 0, 1);
     if ($scoes) {
         $sco = reset($scoes);
@@ -81,20 +124,61 @@ if ($scoid === 0) {
     }
 }
 
+// Load SCORM version library
+$scorm->version = strtolower(clean_param($scorm->version, PARAM_SAFEDIR));
+if (!file_exists($CFG->dirroot.'/mod/scorm/datamodels/'.$scorm->version.'lib.php')) {
+    $scorm->version = 'scorm_12';
+}
+require_once($CFG->dirroot.'/mod/scorm/datamodels/'.$scorm->version.'lib.php');
+
+// Get TOC and validate attempt limits
+$result = scorm_get_toc($USER, $scorm, $cm->id, TOCJSLINK, $currentorg, $scoid, $mode, $attempt, true, true);
+$sco = $result->sco;
+
+// Check if max attempts exceeded
+if ($scorm->lastattemptlock == 1 && $result->attemptleft == 0) {
+    echo $OUTPUT->header();
+    echo $OUTPUT->notification(get_string('exceededmaxattempts', 'scorm'));
+    echo $OUTPUT->footer();
+    exit;
+}
+
+// Set up session variables (required by some SCORM packages)
+$SESSION->scorm = new stdClass();
+$SESSION->scorm->scoid = $sco->id;
+$SESSION->scorm->scormstatus = 'Not Initialized';
+$SESSION->scorm->scormmode = $mode;
+$SESSION->scorm->attempt = $attempt;
+
+// Mark module as viewed for completion tracking
+$completion = new completion_info($course);
+$completion->set_module_viewed($cm);
+
 $debugmode = get_config('local_alx_cdn_scorm', 'debugmode');
 
+// Get course context for page title
+$coursecontext = context_course::instance($course->id);
+
+// Set page layout based on display mode (matches default SCORM player)
+if ($displaymode == 'popup') {
+    $PAGE->set_pagelayout('embedded');
+} else {
+    $shortname = format_string($course->shortname, true, array('context' => $coursecontext));
+    $pagetitle = strip_tags("$shortname: ".format_string($scorm->name));
+    $PAGE->set_title($pagetitle);
+    $PAGE->set_heading($course->fullname);
+}
+
 $PAGE->set_url('/local/alx_cdn_scorm/player.php', array('scormid' => $scormid, 'cmid' => $cmid));
-$PAGE->set_title($scorm->name);
-$PAGE->set_heading($course->fullname);
-$PAGE->set_pagelayout('incourse'); // Use 'incourse' layout to show header and navigation
 $PAGE->set_context($context);
 
 // Instead of AMD, we'll use inline JavaScript for the bridge
 $bridge_params = [
     'scormid' => $scorm->id,
-    'scoid' => $scoid,
+    'scoid' => $sco->id,  // Use validated SCO from TOC
     'cmid' => $cm->id,
-    'attempt' => scorm_get_last_attempt($scorm->id, $USER->id),
+    'attempt' => $attempt,  // Use validated attempt from scorm_check_mode
+    'mode' => $mode,  // Add mode parameter
     'debug' => (bool)$debugmode,
     'wwwroot' => $CFG->wwwroot,
     'sesskey' => sesskey()
@@ -104,14 +188,27 @@ echo $OUTPUT->header();
 
 // Use proxy.php to fetch and inject API into SCORM content
 $proxy_url = $CFG->wwwroot . '/local/alx_cdn_scorm/proxy.php?scormid=' . $scormid . 
-             '&cmid=' . $cmid . '&scoid=' . $scoid . '&url=' . urlencode($scorm_url);
+             '&cmid=' . $cmid . '&scoid=' . $sco->id . '&url=' . urlencode($scorm_url);
+
+// Generate exit URL (matches default SCORM player logic)
+$exiturl = "";
+if (empty($scorm->popup) || $displaymode == 'popup') {
+    if ($course->format == 'singleactivity' && $scorm->skipview == SCORM_SKIPVIEW_ALWAYS
+        && !has_capability('mod/scorm:viewreport', $context)) {
+        // Redirect students back to site home to avoid redirect loop
+        $exiturl = $CFG->wwwroot;
+    } else {
+        // Redirect back to the correct section if one section per page is being used
+        $exiturl = course_get_url($course, $cm->sectionnum)->out();
+    }
+}
 
 $template_data = [
     'scorm_name' => $scorm->name,
     'iframe_src' => $proxy_url,
     'width' => '100%',
     'height' => '800px',
-    'exit_url' => $CFG->wwwroot . '/mod/scorm/view.php?id=' . $cm->id,
+    'exit_url' => $exiturl,  // Use calculated exit URL
     // Bridge parameters for inline JavaScript
     'bridge_scormid' => $bridge_params['scormid'],
     'bridge_scoid' => $bridge_params['scoid'],
