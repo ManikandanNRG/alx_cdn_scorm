@@ -68,7 +68,12 @@
         
         var tracks = [];
         for (var key in state.data) {
-            tracks.push({ element: key, value: state.data[key] });
+            // Only save CMI elements (skip Moodle metadata fields)
+            if (key.indexOf('cmi.') === 0 || key.indexOf('cmi_') === 0) {
+                tracks.push({ element: key, value: state.data[key] });
+            } else {
+                log("Skipping non-CMI element: " + key);
+            }
         }
         
         log("Tracks to save: " + tracks.length + " items");

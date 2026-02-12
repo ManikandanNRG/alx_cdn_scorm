@@ -96,24 +96,62 @@ class external extends \external_api {
         
         self::validate_context($context);
         
+        
+        $saved_count = 0;
+        $failed_count = 0;
+        $errors = [];
+        
         foreach ($params['tracks'] as $track) {
             $element = $track['element'];
             $value = $track['value'];
             
             try {
                 scorm_insert_track($USER->id, $scorm->id, $params['scoid'], $params['attempt'], $element, $value);
+                $saved_count++;
+                
+                // Verify the data was actually inserted
+                $check = $DB->get_record('scorm_scoes_track', array(
+                    'userid' => $USER->id,
+                    'scormid' => $scorm->id,
+                    'scoid' => $params['scoid'],
+                    'attempt' => $params['attempt'],
+                    'element' => $element
+                ));
+                
+                if ($check) {
+                    debugging("local_alx_cdn_scorm: VERIFIED - Saved $element = $value (id: {$check->id})", DEBUG_DEVELOPER);
+                } else {
+                    debugging("local_alx_cdn_scorm: WARNING - Insert succeeded but record not found for $element", DEBUG_DEVELOPER);
+                    $errors[] = "Insert succeeded but record not found for $element";
+                }
             } catch (\Exception $e) {
-                debugging("local_alx_cdn_scorm: Failed to save track $element: " . $e->getMessage(), DEBUG_DEVELOPER);
+                $failed_count++;
+                $error_msg = "Failed to save track $element: " . $e->getMessage();
+                $errors[] = $error_msg;
+                debugging("local_alx_cdn_scorm: " . $error_msg, DEBUG_DEVELOPER);
             }
         }
+        
+        debugging("local_alx_cdn_scorm: Save complete - Saved: $saved_count, Failed: $failed_count", DEBUG_DEVELOPER);
 
-        return array('success' => true);
+        return array(
+            'success' => true,
+            'saved' => $saved_count,
+            'failed' => $failed_count,
+            'errors' => $errors
+        );
     }
 
     public static function save_tracks_returns() {
         return new \external_single_structure(
             array(
-                'success' => new \external_value(PARAM_BOOL, 'True if successful')
+                'success' => new \external_value(PARAM_BOOL, 'True if successful'),
+                'saved' => new \external_value(PARAM_INT, 'Number of tracks saved'),
+                'failed' => new \external_value(PARAM_INT, 'Number of tracks that failed'),
+                'errors' => new \external_multiple_structure(
+                    new \external_value(PARAM_TEXT, 'Error message'),
+                    'Error messages', VALUE_OPTIONAL
+                )
             )
         );
     }
