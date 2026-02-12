@@ -105,6 +105,53 @@ class external extends \external_api {
             $element = $track['element'];
             $value = $track['value'];
             
+            // ✅ CRITICAL FIX: Prevent completion status downgrade
+            // Once a SCORM is completed/passed, it should never go back to incomplete
+            // This matches native Moodle SCORM behavior
+            if ($element == 'cmi.core.lesson_status' || $element == 'cmi.completion_status') {
+                // Check if there's an existing status
+                $existing = $DB->get_record('scorm_scoes_track', array(
+                    'userid' => $USER->id,
+                    'scormid' => $scorm->id,
+                    'scoid' => $params['scoid'],
+                    'attempt' => $params['attempt'],
+                    'element' => $element
+                ));
+                
+                if ($existing) {
+                    $existing_status = $existing->value;
+                    
+                    // Define completion states (in order of precedence)
+                    $completed_states = array('completed', 'passed');
+                    $incomplete_states = array('incomplete', 'not attempted', 'unknown', 'browsed');
+                    
+                    // If existing status is completed/passed, don't allow downgrade to incomplete
+                    if (in_array($existing_status, $completed_states) && in_array($value, $incomplete_states)) {
+                        debugging("local_alx_cdn_scorm: BLOCKED status downgrade from '$existing_status' to '$value' - keeping existing status", DEBUG_DEVELOPER);
+                        // Skip this track - don't save the downgrade
+                        continue;
+                    }
+                    
+                    debugging("local_alx_cdn_scorm: Status change allowed: '$existing_status' -> '$value'", DEBUG_DEVELOPER);
+                }
+            }
+            
+            // Also check success_status (SCORM 2004)
+            if ($element == 'cmi.success_status') {
+                $existing = $DB->get_record('scorm_scoes_track', array(
+                    'userid' => $USER->id,
+                    'scormid' => $scorm->id,
+                    'scoid' => $params['scoid'],
+                    'attempt' => $params['attempt'],
+                    'element' => $element
+                ));
+                
+                if ($existing && $existing->value == 'passed' && $value == 'failed') {
+                    debugging("local_alx_cdn_scorm: BLOCKED success_status downgrade from 'passed' to 'failed'", DEBUG_DEVELOPER);
+                    continue;
+                }
+            }
+            
             try {
                 scorm_insert_track($USER->id, $scorm->id, $params['scoid'], $params['attempt'], $element, $value);
                 $saved_count++;

@@ -189,6 +189,11 @@ echo $OUTPUT->header();
 if ($displaymode !== 'popup') {
     $renderer = $PAGE->get_renderer('mod_scorm');
     echo $renderer->generate_exitbar($exiturl);
+    
+    // ✅ Display mode text (Review mode, Browse mode, Normal mode) - matches default player line 224
+    if ($mode !== 'normal') {
+        echo html_writer::div(get_string("{$mode}mode", 'scorm'), 'scorm-left h3', ['id' => 'scormmode']);
+    }
 }
 
 // Check if we need to open a popup window (matches default player lines 247-263)
