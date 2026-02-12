@@ -46,14 +46,40 @@ class form_hook {
         // Now use $form to add elements
         if ($form->elementExists('scormtype')) {
             
+            // LOAD EXISTING DATA from database
+            global $DB;
+            $scormid = optional_param('update', 0, PARAM_INT); // When editing, 'update' param contains the cmid
+            
+            $existingEnabled = 0;
+            $existingUrl = '';
+            
+            if ($scormid > 0) {
+                // Get the actual scorm instance ID from the course module
+                $cm = get_coursemodule_from_id('scorm', $scormid, 0, false, IGNORE_MISSING);
+                if ($cm) {
+                    error_log('ALX CDN DEBUG: Loading form, CM ID: ' . $scormid . ', SCORM ID: ' . $cm->instance);
+                    
+                    $record = $DB->get_record('local_alx_cdn_scorm', array('scormid' => $cm->instance));
+                    if ($record) {
+                        $existingEnabled = $record->enabled;
+                        $existingUrl = $record->cdnurl;
+                        error_log('ALX CDN DEBUG: Found existing - enabled: ' . $existingEnabled . ', url: ' . $existingUrl);
+                    } else {
+                        error_log('ALX CDN DEBUG: No existing record found');
+                    }
+                }
+            }
+            
             // Add a header/separator for clarity
             $form->addElement('header', 'local_alx_cdn_header', get_string('pluginname', 'local_alx_cdn_scorm'));
 
             $form->addElement('checkbox', 'local_alx_cdn_enable', get_string('enablecdn', 'local_alx_cdn_scorm'), get_string('enablecdn_desc', 'local_alx_cdn_scorm'));
             $form->addHelpButton('local_alx_cdn_enable', 'enablecdn', 'local_alx_cdn_scorm');
+            $form->setDefault('local_alx_cdn_enable', $existingEnabled); // SET DEFAULT!
             
             $form->addElement('text', 'local_alx_cdn_url', get_string('cdnurl', 'local_alx_cdn_scorm'), array('size' => 60));
             $form->setType('local_alx_cdn_url', PARAM_RAW); 
+            $form->setDefault('local_alx_cdn_url', $existingUrl); // SET DEFAULT!
             $form->hideIf('local_alx_cdn_url', 'local_alx_cdn_enable', 'notchecked');
 
             // --- SERVER SIDE FIXES ---
