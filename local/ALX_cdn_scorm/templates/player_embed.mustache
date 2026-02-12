@@ -64,16 +64,22 @@
     
     var commit = function() {
         log("Committing data to server...");
+        log("Current state.data: " + JSON.stringify(state.data));
         
         var tracks = [];
         for (var key in state.data) {
             tracks.push({ element: key, value: state.data[key] });
         }
         
-        if (tracks.length === 0) return "true";
+        log("Tracks to save: " + tracks.length + " items");
+        if (tracks.length === 0) {
+            log("WARNING: No tracks to save!");
+            return "true";
+        }
         
         // Use Moodle's AJAX
         require(['core/ajax'], function(Ajax) {
+            log("Calling save_tracks web service...");
             Ajax.call([{
                 methodname: 'local_alx_cdn_scorm_save_tracks',
                 args: {
@@ -85,7 +91,8 @@
             }])[0].done(function(response) {
                 log("Save success: " + JSON.stringify(response));
             }).fail(function(ex) {
-                log("Save failed: " + JSON.stringify(ex));
+                log("Save FAILED: " + JSON.stringify(ex));
+                console.error("Save error:", ex);
             });
         });
         
@@ -210,6 +217,20 @@
     window.addEventListener("message", handleMessage, false);
     
     log("Bridge Controller Initialized (Inline) for SCORM " + state.scormid);
+    
+    // Auto-commit on page unload to save data even if SCORM doesn't call Finish
+    window.addEventListener("beforeunload", function() {
+        log("Page unloading - auto-committing data...");
+        commit();
+    });
+    
+    // Periodic auto-save every 30 seconds
+    setInterval(function() {
+        if (Object.keys(state.data).length > 0) {
+            log("Periodic auto-save triggered");
+            commit();
+        }
+    }, 30000);
     
     // Load existing data
     if (typeof require !== 'undefined') {
