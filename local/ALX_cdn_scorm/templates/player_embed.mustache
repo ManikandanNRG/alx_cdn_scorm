@@ -1,3 +1,23 @@
+<style>
+.local-alx-cdn-player-container {
+    width: 100%;
+    min-width: 1024px; /* Force desktop layout */
+    margin: 0 auto;
+}
+.scorm-frame-wrapper {
+    width: 100%;
+    min-height: 600px;
+    position: relative;
+}
+.scorm-frame-wrapper iframe {
+    width: 100% !important;
+    min-width: 1024px !important;
+    height: 100vh !important;
+    max-height: 900px;
+    border: none;
+}
+</style>
+
 <div class="local-alx-cdn-player-container">
     <div class="scorm-header">
         <h2>{{scorm_name}}</h2>
@@ -5,8 +25,6 @@
     <div class="scorm-frame-wrapper">
         <iframe id="scorm_object" 
                 src="{{iframe_src}}" 
-                width="{{width}}" 
-                height="{{height}}" 
                 frameborder="0" 
                 allowfullscreen="allowfullscreen" 
                 webkitallowfullscreen="webkitallowfullscreen" 
@@ -15,3 +33,188 @@
     </div>
     <div id="scorm-debug-log" style="display:none; border:1px solid #ccc; max-height: 200px; overflow:auto;"></div>
 </div>
+
+<script>
+// Inline Bridge Controller (no AMD compilation needed)
+(function() {
+    var state = {
+        scormid: {{{bridge_scormid}}},
+        scoid: {{{bridge_scoid}}},
+        cmid: {{{bridge_cmid}}},
+        attempt: {{{bridge_attempt}}},
+        debug: {{{bridge_debug}}},
+        wwwroot: '{{{bridge_wwwroot}}}',
+        sesskey: '{{{bridge_sesskey}}}',
+        data: {}
+    };
+    
+    var log = function(msg) {
+        if (state.debug && console && console.log) {
+            console.log("[Bridge] " + msg);
+        }
+    };
+    
+    var getValue = function(element) {
+        return state.data[element] || "";
+    };
+    
+    var setValue = function(element, value) {
+        state.data[element] = value;
+        return "true";
+    };
+    
+    var commit = function() {
+        log("Committing data to server...");
+        
+        var tracks = [];
+        for (var key in state.data) {
+            tracks.push({ element: key, value: state.data[key] });
+        }
+        
+        if (tracks.length === 0) return "true";
+        
+        // Use Moodle's AJAX
+        require(['core/ajax'], function(Ajax) {
+            Ajax.call([{
+                methodname: 'local_alx_cdn_scorm_save_tracks',
+                args: {
+                    scormid: state.scormid,
+                    scoid: state.scoid,
+                    attempt: state.attempt,
+                    tracks: tracks
+                }
+            }])[0].done(function(response) {
+                log("Save success: " + JSON.stringify(response));
+            }).fail(function(ex) {
+                log("Save failed: " + JSON.stringify(ex));
+            });
+        });
+        
+        return "true";
+    };
+    
+    var loadData = function() {
+        log("Loading user data for resume...");
+        
+        require(['core/ajax'], function(Ajax) {
+            Ajax.call([{
+                methodname: 'local_alx_cdn_scorm_get_user_tracks',
+                args: {
+                    scormid: state.scormid,
+                    scoid: state.scoid,
+                    attempt: state.attempt
+                }
+            }])[0].done(function(response) {
+                log("Data loaded: " + (response.tracks ? response.tracks.length : 0) + " items");
+                if (response.tracks) {
+                    response.tracks.forEach(function(track) {
+                        state.data[track.element] = track.value;
+                    });
+                }
+            }).fail(function(ex) {
+                log("Data load failed: " + JSON.stringify(ex));
+            });
+        });
+    };
+    
+    // Create SCORM API object
+    var ScormAPI = {
+        LMSInitialize: function(param) {
+            log("LMSInitialize called");
+            return "true";
+        },
+        
+        LMSFinish: function(param) {
+            log("LMSFinish called");
+            commit();
+            return "true";
+        },
+        
+        LMSGetValue: function(element) {
+            log("LMSGetValue: " + element);
+            return getValue(element);
+        },
+        
+        LMSSetValue: function(element, value) {
+            log("LMSSetValue: " + element + " = " + value);
+            return setValue(element, value);
+        },
+        
+        LMSCommit: function(param) {
+            log("LMSCommit called");
+            return commit();
+        },
+        
+        LMSGetLastError: function() { return "0"; },
+        LMSGetErrorString: function(errorCode) { return "No error"; },
+        LMSGetDiagnostic: function(errorCode) { return "No diagnostic"; }
+    };
+    
+    // SCORM 2004 API
+    var ScormAPI2004 = {
+        Initialize: ScormAPI.LMSInitialize,
+        Terminate: ScormAPI.LMSFinish,
+        GetValue: ScormAPI.LMSGetValue,
+        SetValue: ScormAPI.LMSSetValue,
+        Commit: ScormAPI.LMSCommit,
+        GetLastError: ScormAPI.LMSGetLastError,
+        GetErrorString: ScormAPI.LMSGetErrorString,
+        GetDiagnostic: ScormAPI.LMSGetDiagnostic
+    };
+    
+    // Handle postMessage from iframe  
+    var handleMessage = function(event) {
+        var iframe = document.getElementById('scorm_object');
+        if (!iframe || !event.source) return;
+        
+        try {
+            var msg = JSON.parse(event.data);
+            if (msg.source !== 'scorm_content') return;
+            
+            log("Received message: " + msg.type);
+            
+            var response = {
+                source: 'scorm_bridge',
+                id: msg.id,
+                result: 'true'
+            };
+            
+            switch (msg.type) {
+                case 'LMSInitialize':
+                    response.result = ScormAPI.LMSInitialize(msg.param);
+                    break;
+                case 'LMSGetValue':
+                    response.result = ScormAPI.LMSGetValue(msg.element);
+                    break;
+                case 'LMSSetValue':
+                    response.result = ScormAPI.LMSSetValue(msg.element, msg.value);
+                    break;
+                case 'LMSCommit':
+                    response.result = ScormAPI.LMSCommit(msg.param);
+                    break;
+                case 'LMSFinish':
+                    response.result = ScormAPI.LMSFinish(msg.param);
+                    break;
+            }
+            
+            event.source.postMessage(JSON.stringify(response), "*");
+        } catch (e) {
+            // Not our message
+        }
+    };
+    
+    // Expose APIs
+    window.API = ScormAPI;
+    window.API_1484_11 = ScormAPI2004;
+    
+    // Listen for messages
+    window.addEventListener("message", handleMessage, false);
+    
+    log("Bridge Controller Initialized (Inline) for SCORM " + state.scormid);
+    
+    // Load existing data
+    if (typeof require !== 'undefined') {
+        loadData();
+    }
+})();
+</script>

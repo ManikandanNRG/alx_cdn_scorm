@@ -195,3 +195,35 @@ function local_alx_cdn_scorm_coursemodule_standard_elements($mform, $course) {
 function local_alx_cdn_scorm_extend_settings_navigation($settingsnav, $context) {
     // Placeholder for future use
 }
+
+/**
+ * Redirect to CDN player if enabled.
+ * This intercepts ALL SCORM player launches (including when students click activity name).
+ */
+function local_alx_cdn_scorm_before_http_headers() {
+    global $PAGE, $DB, $CFG;
+    
+    // Only intercept the default SCORM player page
+    if ($PAGE->pagetype === 'mod-scorm-player') {
+        // Get SCORM ID from URL parameters
+        $scormid = optional_param('a', 0, PARAM_INT);
+        $cmid = optional_param('cm', 0, PARAM_INT);
+        
+        if ($scormid > 0) {
+            // Check if CDN is enabled for this SCORM
+            $record = $DB->get_record('local_alx_cdn_scorm', array('scormid' => $scormid));
+            
+            if ($record && $record->enabled) {
+                // Get CM ID if not provided
+                if ($cmid == 0) {
+                    $cm = get_coursemodule_from_instance('scorm', $scormid);
+                    $cmid = $cm ? $cm->id : 0;
+                }
+                
+                // Redirect to our custom CDN player
+                $redirectUrl = $CFG->wwwroot . '/local/alx_cdn_scorm/player.php?scormid=' . $scormid . '&cmid=' . $cmid;
+                redirect($redirectUrl);
+            }
+        }
+    }
+}

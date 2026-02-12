@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>SCORM API Frame Proxy</title>
+    <script>
+        /**
+         * This script creates a SCORM API_1484_11 object that uses postMessage
+         * to communicate with the parent window where the real API implementation lives.
+         */
+        
+        console.log('ALX CDN: API Proxy loading...');
+        
+        var requestId = 0;
+        var pendingRequests = {};
+        
+        // Create the API object that SCORM content will find
+        var API_1484_11 = {
+            Initialize: function(param) {
+                console.log('ALX CDN: Initialize called');
+                return sendToParent('LMSInitialize', { param: param });
+            },
+            
+            Terminate: function(param) {
+                console.log('ALX CDN: Terminate called');
+                return sendToParent('LMSFinish', { param: param });
+            },
+            
+            GetValue: function(element) {
+                console.log('ALX CDN: GetValue -', element);
+                return sendToParent('LMSGetValue', { element: element });
+            },
+            
+            SetValue: function(element, value) {
+                console.log('ALX CDN: SetValue -', element, '=', value);
+                return sendToParent('LMSSetValue', { element: element, value: value });
+            },
+            
+            Commit: function(param) {
+                console.log('ALX CDN: Commit called');
+                return sendToParent('LMSCommit', { param: param });
+            },
+            
+            GetLastError: function() {
+                return '0';
+            },
+            
+            GetErrorString: function(errorCode) {
+                return 'No error';
+            },
+            
+            GetDiagnostic: function(errorCode) {
+                return 'No diagnostic';
+            }
+        };
+        
+        // Old SCORM 1.2 API (for backwards compatibility)
+        var API = {
+            LMSInitialize: API_1484_11.Initialize,
+            LMSFinish: API_1484_11.Terminate,
+            LMSGetValue: API_1484_11.GetValue,
+            LMSSetValue: API_1484_11.SetValue,
+            LMSCommit: API_1484_11.Commit,
+            LMSGetLastError: API_1484_11.GetLastError,
+            LMSGetErrorString: API_1484_11.GetErrorString,
+            LMSGetDiagnostic: API_1484_11.GetDiagnostic
+        };
+        
+        function sendToParent(type, params) {
+            var id = ++requestId;
+            
+            var message = {
+                source: 'scorm_content',
+                type: type,
+                id: id
+            };
+            
+            // Merge params into message
+            for (var key in params) {
+                message[key] = params[key];
+            }
+            
+            console.log('ALX CDN: Sending to parent:', message);
+            
+            // For synchronous operations, we need a workaround
+            // Store the result and return it
+            var result = 'true';
+            
+            // Send to parent
+            if (window.parent && window.parent !== window) {
+                window.parent.postMessage(JSON.stringify(message), '*');
+            }
+            
+            return result;
+        }
+        
+        // Listen for responses from parent
+        window.addEventListener('message', function(event) {
+            try {
+                var data = JSON.parse(event.data);
+                if (data.source === 'scorm_bridge' && data.id) {
+                    console.log('ALX CDN: Received from parent:', data);
+                    // Store result for next call if needed
+                }
+            } catch (e) {
+                // Not our message
+            }
+        });
+        
+        // Expose APIs globally
+        window.API = API;
+        window.API_1484_11 = API_1484_11;
+        
+        console.log('ALX CDN: API Proxy ready - API and API_1484_11 are available');
+    </script>
+</head>
+<body style="margin:0; padding:0; overflow:hidden;">
+    <iframe id="scorm_content" style="width:100%; height:100vh; border:none;"></iframe>
+    <script>
+        // Get the actual SCORM URL from parent
+        var urlParams = new URLSearchParams(window.location.search);
+        var scormUrl = urlParams.get('url');
+        
+        if (scormUrl) {
+            console.log('ALX CDN: Loading SCORM content from:', scormUrl);
+            document.getElementById('scorm_content').src = scormUrl;
+        } else {
+            document.body.innerHTML = '<div style="padding:20px; color:red;">Error: No SCORM URL provided</div>';
+        }
+    </script>
+</body>
+</html>

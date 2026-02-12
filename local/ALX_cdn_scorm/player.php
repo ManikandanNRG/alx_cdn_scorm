@@ -88,21 +88,36 @@ $PAGE->set_title($scorm->name);
 $PAGE->set_heading($course->fullname);
 $PAGE->set_pagelayout('popup');
 
-$PAGE->requires->js_call_amd('local_alx_cdn_scorm/bridge_controller', 'init', array(
+// Instead of AMD, we'll use inline JavaScript for the bridge
+$bridge_params = [
     'scormid' => $scorm->id,
     'scoid' => $scoid,
     'cmid' => $cm->id,
-    'attempt' => scorm_get_last_attempt($scorm->id, $USER->id), // Better attempt handling
-    'debug' => (bool)$debugmode
-));
+    'attempt' => scorm_get_last_attempt($scorm->id, $USER->id),
+    'debug' => (bool)$debugmode,
+    'wwwroot' => $CFG->wwwroot,
+    'sesskey' => sesskey()
+];
 
 echo $OUTPUT->header();
 
+// Use proxy.php to fetch and inject API into SCORM content
+$proxy_url = $CFG->wwwroot . '/local/alx_cdn_scorm/proxy.php?scormid=' . $scormid . 
+             '&cmid=' . $cmid . '&scoid=' . $scoid . '&url=' . urlencode($scorm_url);
+
 $template_data = [
     'scorm_name' => $scorm->name,
-    'iframe_src' => $scorm_url,
+    'iframe_src' => $proxy_url,
     'width' => '100%',
-    'height' => '800px'
+    'height' => '800px',
+    // Bridge parameters for inline JavaScript
+    'bridge_scormid' => $bridge_params['scormid'],
+    'bridge_scoid' => $bridge_params['scoid'],
+    'bridge_cmid' => $bridge_params['cmid'],
+    'bridge_attempt' => $bridge_params['attempt'],
+    'bridge_debug' => $bridge_params['debug'] ? 'true' : 'false',
+    'bridge_wwwroot' => $bridge_params['wwwroot'],
+    'bridge_sesskey' => $bridge_params['sesskey']
 ];
 
 echo $OUTPUT->render_from_template('local_alx_cdn_scorm/player_embed', $template_data);
