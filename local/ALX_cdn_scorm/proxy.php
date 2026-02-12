@@ -97,6 +97,21 @@ if ('serviceWorker' in navigator) {
         });
 }
 </script>
+
+<!-- Force desktop viewport and layout -->
+<meta name="viewport" content="width=1024, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<style>
+    /* Force desktop layout for SCORM content */
+    html, body {
+        min-width: 1024px !important;
+        width: 100% !important;
+        overflow-x: auto !important;
+    }
+    body {
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+</style>
 <script>
 console.log('ALX CDN: Injecting SCORM API into content window...');
 

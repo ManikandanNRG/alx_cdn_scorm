@@ -41,7 +41,7 @@
         debug: {{{bridge_debug}}},
         wwwroot: '{{{bridge_wwwroot}}}',
         sesskey: '{{{bridge_sesskey}}}',
-        data: {}
+        data: {{{scorm_data_json}}}  // Pre-loaded tracking data from PHP
     };
     
     var log = function(msg) {
@@ -49,6 +49,9 @@
             console.log("[Bridge] " + msg);
         }
     };
+    
+    // Log loaded data count
+    log("SCORM data initialized with " + Object.keys(state.data).length + " elements");
     
     var getValue = function(element) {
         return state.data[element] || "";

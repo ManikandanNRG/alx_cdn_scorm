@@ -229,12 +229,21 @@ if ($result->prerequisites) {
             'sesskey' => sesskey()
         ];
         
+        // Load saved tracking data (for resume functionality)
+        $userdata = scorm_get_tracks($sco->id, $USER->id, $attempt);
+        $scorm_data_json = '{}';
+        if ($userdata) {
+            // Convert to JSON for JavaScript
+            $scorm_data_json = json_encode($userdata, JSON_HEX_APOS | JSON_HEX_QUOT);
+        }
+        
         $template_data = [
             'scorm_name' => $scorm->name,
             'iframe_src' => $proxy_url,
             'width' => '100%',
             'height' => '800px',
             'show_exit_button' => false,  // Exit button already shown above
+            'scorm_data_json' => $scorm_data_json,  // Pre-loaded tracking data
             // Bridge parameters for inline JavaScript
             'bridge_scormid' => $bridge_params['scormid'],
             'bridge_scoid' => $bridge_params['scoid'],
