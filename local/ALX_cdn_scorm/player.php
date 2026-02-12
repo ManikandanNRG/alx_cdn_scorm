@@ -111,6 +111,7 @@ $template_data = [
     'iframe_src' => $proxy_url,
     'width' => '100%',
     'height' => '800px',
+    'exit_url' => $CFG->wwwroot . '/mod/scorm/view.php?id=' . $cm->id,
     // Bridge parameters for inline JavaScript
     'bridge_scormid' => $bridge_params['scormid'],
     'bridge_scoid' => $bridge_params['scoid'],
