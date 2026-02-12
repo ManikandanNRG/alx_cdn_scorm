@@ -208,24 +208,41 @@ console.log('ALX CDN: API ready - window.API and window.API_1484_11 available');
 // DEBUG overlay
 var debugMode = {$debugmode};
 if (debugMode) {
-    var debugOverlay = document.createElement('div');
-    debugOverlay.style.cssText = 'position:fixed;top:0;left:0;background:rgba(0,0,0,0.8);color:#0f0;padding:10px;z-index:99999;font-family:monospace;font-size:12px;pointer-events:none;max-width:100%;word-wrap:break-word;';
-    debugOverlay.innerHTML = '<strong>ALX SCORM Proxy Debug</strong><br>' +
-        'Fetched URL: {$url}<br>' +
-        'Base URL: {$base_url}<br>' +
-        'API Status: Injected';
-    document.body.appendChild(debugOverlay);
-    
-    // Check for 404s on resources
-    window.addEventListener('error', function(e) {
-        if(e.target && (e.target.tagName === 'IMG' || e.target.tagName === 'SCRIPT' || e.target.tagName === 'LINK')) {
-             console.error('ALX CDN Resource Error:', e.target.src || e.target.href);
-             var errDiv = document.createElement('div');
-             errDiv.style.color = 'red';
-             errDiv.innerText = 'Failed: ' + (e.target.src || e.target.href);
-             debugOverlay.appendChild(errDiv);
+    // Wait for DOM to be ready before adding debug overlay
+    function initDebugOverlay() {
+        var debugOverlay = document.createElement('div');
+        debugOverlay.style.cssText = 'position:fixed;top:0;left:0;background:rgba(0,0,0,0.8);color:#0f0;padding:10px;z-index:99999;font-family:monospace;font-size:12px;pointer-events:none;max-width:100%;word-wrap:break-word;';
+        debugOverlay.innerHTML = '<strong>ALX SCORM Proxy Debug</strong><br>' +
+            'Fetched URL: {$url}<br>' +
+            'Base URL: {$base_url}<br>' +
+            'API Status: Injected';
+        
+        if (document.body) {
+            document.body.appendChild(debugOverlay);
+        } else {
+            console.warn('ALX CDN: document.body not ready for debug overlay');
         }
-    }, true);
+        
+        // Check for 404s on resources
+        window.addEventListener('error', function(e) {
+            if(e.target && (e.target.tagName === 'IMG' || e.target.tagName === 'SCRIPT' || e.target.tagName === 'LINK')) {
+                 console.error('ALX CDN Resource Error:', e.target.src || e.target.href);
+                 if (debugOverlay && debugOverlay.parentNode) {
+                     var errDiv = document.createElement('div');
+                     errDiv.style.color = 'red';
+                     errDiv.innerText = 'Failed: ' + (e.target.src || e.target.href);
+                     debugOverlay.appendChild(errDiv);
+                 }
+            }
+        }, true);
+    }
+    
+    // Run when DOM is ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initDebugOverlay);
+    } else {
+        initDebugOverlay();
+    }
 }
 </script>
 SCRIPT;
