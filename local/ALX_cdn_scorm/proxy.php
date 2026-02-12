@@ -56,19 +56,8 @@ $scheme = isset($parsed_url['scheme']) ? $parsed_url['scheme'] : 'https';
 $host = isset($parsed_url['host']) ? $parsed_url['host'] : '';
 $base_url = $scheme . '://' . $host . $base_path;
 
-// Get attempt
-$attempt = 1;
-// We cannot use scorm_get_last_attempt safely here as it might not be available or context might be wrong
-// So we query the database directly
-$sql = "SELECT max(attempt) as maxattempt FROM {scorm_scoes_track} 
-        WHERE scormid = ? AND userid = ?";
-$max_attempt = $DB->get_record_sql($sql, array($scorm->id, $USER->id));
-if ($max_attempt && $max_attempt->maxattempt) {
-    $attempt = $max_attempt->maxattempt;
-} else {
-    // Check if we should create a new attempt or use 1
-    $attempt = 1;
-}
+// Get attempt number from URL (validated by player.php)
+$attempt = optional_param('attempt', 1, PARAM_INT);
 
 $debugmode = get_config('local_alx_cdn_scorm', 'debugmode');
 

@@ -216,7 +216,7 @@ if ($result->prerequisites) {
     } else {
         // This is "Current window" or "Popup" mode - embed the SCORM
         $proxy_url = $CFG->wwwroot . '/local/alx_cdn_scorm/proxy.php?scormid=' . $scormid . 
-                     '&cmid=' . $cmid . '&scoid=' . $sco->id . '&url=' . urlencode($scorm_url);
+                     '&cmid=' . $cmid . '&scoid=' . $sco->id . '&attempt=' . $attempt . '&url=' . urlencode($scorm_url);
         
         $bridge_params = [
             'scormid' => $scorm->id,
