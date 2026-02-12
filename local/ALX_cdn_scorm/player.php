@@ -86,7 +86,8 @@ $debugmode = get_config('local_alx_cdn_scorm', 'debugmode');
 $PAGE->set_url('/local/alx_cdn_scorm/player.php', array('scormid' => $scormid, 'cmid' => $cmid));
 $PAGE->set_title($scorm->name);
 $PAGE->set_heading($course->fullname);
-$PAGE->set_pagelayout('popup');
+$PAGE->set_pagelayout('incourse'); // Use 'incourse' layout to show header and navigation
+$PAGE->set_context($context);
 
 // Instead of AMD, we'll use inline JavaScript for the bridge
 $bridge_params = [
