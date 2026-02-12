@@ -62,8 +62,16 @@
         return "true";
     };
     
-    var commit = function() {
-        log("Committing data to server...");
+    var saveRetryCount = 0;
+    var maxRetries = 3;
+    var retryDelay = 2000; // 2 seconds
+    
+    var commit = function(isRetry) {
+        if (!isRetry) {
+            saveRetryCount = 0;
+        }
+        
+        log("Committing data to server..." + (isRetry ? " (Retry " + saveRetryCount + "/" + maxRetries + ")" : ""));
         log("Current state.data: " + JSON.stringify(state.data));
         
         var tracks = [];
@@ -95,9 +103,22 @@
                 }
             }])[0].done(function(response) {
                 log("Save success: " + JSON.stringify(response));
+                saveRetryCount = 0; // Reset retry count on success
             }).fail(function(ex) {
                 log("Save FAILED: " + JSON.stringify(ex));
                 console.error("Save error:", ex);
+                
+                // Retry logic for network failures
+                if (saveRetryCount < maxRetries) {
+                    saveRetryCount++;
+                    log("Retrying save in " + (retryDelay/1000) + " seconds...");
+                    setTimeout(function() {
+                        commit(true);
+                    }, retryDelay);
+                } else {
+                    log("ERROR: Save failed after " + maxRetries + " attempts. Data may be lost!");
+                    console.error("CRITICAL: Unable to save SCORM data after multiple attempts");
+                }
             });
         });
         
