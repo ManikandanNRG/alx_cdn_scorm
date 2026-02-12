@@ -251,7 +251,13 @@ if ($result->prerequisites) {
             'bridge_attempt' => $bridge_params['attempt'],
             'bridge_debug' => $bridge_params['debug'] ? 'true' : 'false',
             'bridge_wwwroot' => $bridge_params['wwwroot'],
-            'bridge_sesskey' => $bridge_params['sesskey']
+            'bridge_sesskey' => $bridge_params['sesskey'],
+            // Additional parameters for missing SCORM features
+            'mode' => $mode,
+            'currentorg' => $currentorg,
+            'scormauto' => $scorm->auto,
+            'masteryoverride' => $scorm->masteryoverride,
+            'hidetoc' => $scorm->hidetoc
         ];
         
         echo $OUTPUT->render_from_template('local_alx_cdn_scorm/player_embed', $template_data);

@@ -74,6 +74,42 @@
         log("Committing data to server..." + (isRetry ? " (Retry " + saveRetryCount + "/" + maxRetries + ")" : ""));
         log("Current state.data: " + JSON.stringify(state.data));
         
+        // Feature 3: Mastery Score Override (matching native player lines 629-636)
+        var masteryoverride = {{masteryoverride}};
+        var lessonMode = state.data['cmi.core.lesson_mode'] || '{{mode}}';
+        var credit = state.data['cmi.core.credit'] || '';
+        
+        if (masteryoverride && lessonMode === 'normal' && credit === 'credit') {
+            var masteryScore = state.data['cmi.student_data.mastery_score'];
+            var rawScore = state.data['cmi.core.score.raw'];
+            
+            if (masteryScore !== '' && masteryScore !== undefined && 
+                rawScore !== '' && rawScore !== undefined) {
+                
+                var mastery = parseFloat(masteryScore);
+                var raw = parseFloat(rawScore);
+                
+                if (!isNaN(mastery) && !isNaN(raw)) {
+                    if (raw >= mastery) {
+                        state.data['cmi.core.lesson_status'] = 'passed';
+                        log("Mastery override: PASSED (score: " + raw + " >= " + mastery + ")");
+                    } else {
+                        state.data['cmi.core.lesson_status'] = 'failed';
+                        log("Mastery override: FAILED (score: " + raw + " < " + mastery + ")");
+                    }
+                }
+            }
+        }
+        
+        // Feature 4: Browse Mode Handling (matching native player lines 638-642)
+        if (lessonMode === 'browse') {
+            var lessonStatus = state.data['cmi.core.lesson_status'] || '';
+            if (lessonStatus === '' || lessonStatus === 'not attempted') {
+                state.data['cmi.core.lesson_status'] = 'browsed';
+                log("Browse mode: Status set to 'browsed'");
+            }
+        }
+        
         var tracks = [];
         for (var key in state.data) {
             // Only save CMI elements (skip Moodle metadata fields)
@@ -104,6 +140,9 @@
             }])[0].done(function(response) {
                 log("Save success: " + JSON.stringify(response));
                 saveRetryCount = 0; // Reset retry count on success
+                
+                // Feature 1: Update TOC after successful save
+                updateTOC();
             }).fail(function(ex) {
                 log("Save FAILED: " + JSON.stringify(ex));
                 console.error("Save error:", ex);
@@ -123,6 +162,65 @@
         });
         
         return "true";
+    };
+    
+    // Feature 1: TOC Update Callback
+    var updateTOC = function() {
+        var hidetoc = '{{hidetoc}}';
+        
+        // Only update TOC if it's displayed (hidetoc != 3 means TOC is enabled)
+        if (hidetoc === '3') {
+            log("TOC update skipped - TOC is disabled");
+            return;
+        }
+        
+        if (typeof M !== 'undefined' && typeof M.mod_scorm !== 'undefined' && 
+            typeof M.mod_scorm.connectPrereqCallback !== 'undefined') {
+            
+            log("Updating TOC with prerequisites...");
+            
+            var prerequrl = '{{{bridge_wwwroot}}}/mod/scorm/prereqs.php?a={{bridge_scormid}}&scoid={{bridge_scoid}}&attempt={{bridge_attempt}}&mode={{mode}}&currentorg={{currentorg}}&sesskey={{bridge_sesskey}}';
+            
+            require(['core/yui'], function(Y) {
+                Y.use('io-base', function(Y) {
+                    var callback = M.mod_scorm.connectPrereqCallback;
+                    Y.on('io:complete', callback.success, Y);
+                    Y.io(prerequrl);
+                    log("TOC update request sent");
+                });
+            });
+        } else {
+            log("TOC update skipped - not available in this context (embedded player mode)");
+        }
+    };
+    
+    // Feature 2: Auto-Navigation Functions
+    var launchNextSCO = function() {
+        log("Auto-navigation: Launching next SCO...");
+        
+        if (typeof mod_scorm_launch_next_sco === 'function') {
+            mod_scorm_launch_next_sco();
+        } else if (typeof window.parent.mod_scorm_launch_next_sco === 'function') {
+            window.parent.mod_scorm_launch_next_sco();
+        } else {
+            log("WARNING: mod_scorm_launch_next_sco not available");
+            // Fallback: post message to parent
+            window.parent.postMessage({type: 'scorm_next'}, '*');
+        }
+    };
+    
+    var launchPrevSCO = function() {
+        log("Auto-navigation: Launching previous SCO...");
+        
+        if (typeof mod_scorm_launch_prev_sco === 'function') {
+            mod_scorm_launch_prev_sco();
+        } else if (typeof window.parent.mod_scorm_launch_prev_sco === 'function') {
+            window.parent.mod_scorm_launch_prev_sco();
+        } else {
+            log("WARNING: mod_scorm_launch_prev_sco not available");
+            // Fallback: post message to parent
+            window.parent.postMessage({type: 'scorm_prev'}, '*');
+        }
     };
     
     var loadData = function() {
@@ -158,7 +256,29 @@
         
         LMSFinish: function(param) {
             log("LMSFinish called");
+            
+            // Commit all data first
             commit();
+            
+            // Feature 2: Auto-navigation logic (matching native player lines 203-212)
+            var navEvent = getValue('nav.event') || '';
+            var scormauto = {{scormauto}};
+            
+            if (navEvent !== '') {
+                if (navEvent === 'continue') {
+                    setTimeout(function() { launchNextSCO(); }, 500);
+                } else if (navEvent === 'previous') {
+                    setTimeout(function() { launchPrevSCO(); }, 500);
+                }
+            } else {
+                if (scormauto == 1) {
+                    setTimeout(function() { launchNextSCO(); }, 500);
+                }
+            }
+            
+            // Also update TOC on finish
+            updateTOC();
+            
             return "true";
         },
         
