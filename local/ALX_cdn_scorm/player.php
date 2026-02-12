@@ -210,6 +210,11 @@ if (!empty($forcejs)) {
     $PAGE->add_body_class('forcejavascript');
 }
 
+// ✅ Add native SCORM body classes to ensure native styles apply
+$PAGE->add_body_class('path-mod-scorm');
+$PAGE->add_body_class('mod-scorm-player');
+$PAGE->set_pagetype('mod-scorm-player'); // Forces ID="page-mod-scorm-player"
+
 // ✅ Get collapse TOC window size (matches default player lines 92-98)
 $collapsetocwinsize = get_config('scorm', 'collapsetocwinsize');
 if (empty($collapsetocwinsize)) {
@@ -256,8 +261,10 @@ $headerconfig = [
 ];
 $activityheader->set_attrs($headerconfig);
 
-// ✅ Add TOC layout CSS
-$PAGE->requires->css('/local/alx_cdn_scorm/styles.css');
+// ✅ Add native SCORM styles (Matches default SCORM player)
+$PAGE->requires->css('/mod/scorm/styles.css');
+// ✅ Add LOCAL plugin styles (Renamed to avoid global pollution)
+$PAGE->requires->css('/local/alx_cdn_scorm/alx_styles.css');
 
 echo $OUTPUT->header();
 
@@ -266,16 +273,16 @@ if ($displaymode !== 'popup') {
     $renderer = $PAGE->get_renderer('mod_scorm');
     echo $renderer->generate_exitbar($exiturl);
     
-    // ✅ Display mode text (Review mode, Browse mode, Normal mode) - matches default player line 224
-    if ($mode !== 'normal') {
-        echo html_writer::div(get_string("{$mode}mode", 'scorm'), 'scorm-left h3', ['id' => 'scormmode']);
+    // ✅ Display mode text (Review mode, Browse mode) - matches default player line 224
+    if ($mode == 'browse' || $mode == 'review') {
+        echo html_writer::div(get_string('reviewmode', 'scorm'), 'scorm-left', array('id' => 'scormmode'));
     }
 }
 
-// ✅ Start SCORM page container (matches default player line 216)
+// ✅ Start SCORM page container (must match native ID for CSS to work)
 echo html_writer::start_div('', array('id' => 'scormpage'));
 
-// ✅ TOC box container (matches default player line 217)
+// ✅ TOC box container (matches native structure)
 echo html_writer::start_div('', array('id' => 'tocbox'));
 
 // SCORM API parent div (matches default player line 218)

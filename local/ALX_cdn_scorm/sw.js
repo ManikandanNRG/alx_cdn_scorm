@@ -38,6 +38,8 @@ self.addEventListener('fetch', function (event) {
         if (relativePath.startsWith('proxy.php') ||
             relativePath.startsWith('player.php') ||
             relativePath.startsWith('sw.js') ||
+            relativePath.startsWith('styles.css') ||
+            relativePath.startsWith('alx_styles.css') ||
             relativePath.startsWith('save.php')) {
             return; // Let it pass through normally
         }
