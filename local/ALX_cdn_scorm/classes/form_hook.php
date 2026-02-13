@@ -94,7 +94,7 @@ class form_hook {
 
             // --- Javascript for UX and Validation ---
             // switching to Vanilla JS with robust selectors and trimming
-            $js = "
+            $js = <<<SCRIPT
 <script>
 (function() {
     var initALX = function() {
@@ -112,7 +112,7 @@ class form_hook {
             return wrapper;
         };
 
-        // --- 1. Relocate Fields ---
+        // --- 1. Relocate ALL Fields from ALX Section ---
         var packageElId = 'id_packagefile';
         if (!document.getElementById(packageElId)) {
              packageElId = 'id_packagefile_filemanager'; 
@@ -125,15 +125,86 @@ class form_hook {
             if (inputs.length) packageWrapper = getWrapper(inputs[0].id);
         }
 
+        // Helper to move an element after a destination
+        var moveAfter = function(source, dest) {
+            if (dest && dest.parentNode && source) {
+                if (dest.nextSibling) {
+                    dest.parentNode.insertBefore(source, dest.nextSibling);
+                } else {
+                    dest.parentNode.appendChild(source);
+                }
+                return source; // Return the moved element as the new destination
+            }
+            return dest;
+        };
+
+        // --- 1. Relocate Known Fields (Enable & URL) ---
+        // This MUST work to preserve previous functionality
         var cdnEnableWrapper = getWrapper('id_local_alx_cdn_enable');
         var cdnUrlWrapper = getWrapper('id_local_alx_cdn_url');
+        
+        var currentDest = packageWrapper;
 
-        if (packageWrapper && cdnEnableWrapper && cdnUrlWrapper) {
-            console.log('ALX CDN JS: Moving fields...');
-            // Insert Enable Checkbox after Package Wrapper
-            packageWrapper.parentNode.insertBefore(cdnEnableWrapper, packageWrapper.nextSibling);
-            // Insert URL Field after Enable Checkbox
-            cdnEnableWrapper.parentNode.insertBefore(cdnUrlWrapper, cdnEnableWrapper.nextSibling);
+        if (packageWrapper) {
+            if (cdnEnableWrapper) {
+                console.log('ALX CDN JS: Moving Enable Checkbox...');
+                currentDest = moveAfter(cdnEnableWrapper, currentDest);
+            }
+            
+            if (cdnUrlWrapper) {
+                console.log('ALX CDN JS: Moving CDN URL...');
+                currentDest = moveAfter(cdnUrlWrapper, currentDest);
+            }
+        }
+
+        // --- 2. Move Any REMAINING Fields from Source Section ---
+        // This catches the 'mystery dropdown' or other fields added by Moodle/plugins
+        var triggerEl = document.getElementById('id_local_alx_cdn_enable'); // The checkbox (now moved)
+        var sourceContainer = null;
+        
+        // Find the ORIGINAL container (fieldset/header) even if the checkbox moved
+        // We can search by ID for the header if possible, or use the moved element's OLD parent?
+        // Actually, since we moved the checkbox, triggerEl.parentNode is now the Package section!
+        // So we need to find the specific "ALX Cloud SCORM" header by ID.
+        var headerEl = document.getElementById('id_hdr_local_alx_cdn_header'); // Standard Moodle ID for header
+        if (headerEl) {
+             sourceContainer = headerEl.closest('fieldset') || headerEl.parentNode;
+        } else {
+             // Try searching for a legend with our text
+             var legends = document.getElementsByTagName('legend');
+             for (var i = 0; i < legends.length; i++) {
+                 if (legends[i].innerText.indexOf('ALX Cloud SCORM') > -1) {
+                     sourceContainer = legends[i].parentNode;
+                     break;
+                 }
+             }
+        }
+
+        if (sourceContainer && packageWrapper) {
+            console.log('ALX CDN JS: Checking for remaining fields in section...');
+            
+            // Iterate all children and move form rows (fitem/form-group)
+            var children = Array.from(sourceContainer.children);
+            children.forEach(function(child) {
+                // Skip the header itself/legend
+                if (child.tagName === 'LEGEND' || child.id === 'id_hdr_local_alx_cdn_header' || 
+                    child.className.indexOf('fheader') > -1) {
+                    return;
+                }
+                
+                // Skip hidden inputs that might be system-generated
+                // Ideally, we move visible rows.
+                if (child.style.display === 'none' && child.tagName !== 'INPUT') {
+                    // might be safe to skip?
+                }
+
+                // Move it to the end of our chain
+                console.log('ALX CDN JS: Moving leftover field', child);
+                currentDest = moveAfter(child, currentDest);
+            });
+            
+            // Hide the now-empty container
+            sourceContainer.style.display = 'none';
         }
 
         // --- 2. Handle Validation / Interaction ---
@@ -209,7 +280,8 @@ class form_hook {
         document.addEventListener('DOMContentLoaded', initALX);
     }
 })();
-</script>";
+</script>
+SCRIPT;
             $form->addElement('html', $js);
             
             // Note: We removed the server-side disabledIfs for packageurl/packagefile 
