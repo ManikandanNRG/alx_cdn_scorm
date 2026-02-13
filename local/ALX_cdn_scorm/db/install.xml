@@ -10,6 +10,7 @@
         <FIELD NAME="scormid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="ID of the scorm activity"/>
         <FIELD NAME="cdnurl" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="The external CDN URL"/>
         <FIELD NAME="enabled" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="playerheight" TYPE="char" LENGTH="20" NOTNULL="true" DEFAULT="680px" SEQUENCE="false" COMMENT="Player height setting (auto or px)"/>
         <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
         <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
       </FIELDS>

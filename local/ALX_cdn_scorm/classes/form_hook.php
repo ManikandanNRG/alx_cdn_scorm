@@ -80,7 +80,24 @@ class form_hook {
             $form->addElement('text', 'local_alx_cdn_url', get_string('cdnurl', 'local_alx_cdn_scorm'), array('size' => 60));
             $form->setType('local_alx_cdn_url', PARAM_RAW); 
             $form->setDefault('local_alx_cdn_url', $existingUrl); // SET DEFAULT!
-            $form->hideIf('local_alx_cdn_url', 'local_alx_cdn_enable', 'notchecked');
+
+            // --- Player Height Option (New Section) ---
+            $existingHeight = '680px';
+            if ($scormid > 0 && isset($record->playerheight)) {
+                $existingHeight = $record->playerheight;
+            }
+
+            $form->addElement('header', 'local_alx_player_header', get_string('player_settings', 'local_alx_cdn_scorm'));
+            
+            $heightOptions = [
+                'auto' => get_string('height_auto', 'local_alx_cdn_scorm'),
+                '680px' => '680px (Standard)',
+                '600px' => '600px',
+                '500px' => '500px'
+            ];
+            $form->addElement('select', 'local_alx_player_height', get_string('player_height', 'local_alx_cdn_scorm'), $heightOptions);
+            $form->addHelpButton('local_alx_player_height', 'player_height', 'local_alx_cdn_scorm');
+            $form->setDefault('local_alx_player_height', $existingHeight);
 
             // --- SERVER SIDE FIXES ---
             // 1. Relax validation on 'packageurl' to prevent 'Invalid URL' errors
@@ -154,6 +171,22 @@ class form_hook {
             if (cdnUrlWrapper) {
                 console.log('ALX CDN JS: Moving CDN URL...');
                 currentDest = moveAfter(cdnUrlWrapper, currentDest);
+            }
+        }
+
+        // --- 2. RELOCATE Player Height Section to Bottom ---
+        var playerHdr = document.getElementById('id_hdr_local_alx_player_header');
+        if (playerHdr) {
+            var playerContainer = playerHdr.closest('fieldset');
+            var mainForm = document.querySelector('form.mform');
+            if (mainForm && playerContainer) {
+                // Find all fieldsets in the form
+                var fieldsets = mainForm.querySelectorAll('fieldset');
+                if (fieldsets.length > 0) {
+                    var lastFieldset = fieldsets[fieldsets.length - 1];
+                    console.log('ALX CDN JS: Moving Player Settings to bottom...');
+                    moveAfter(playerContainer, lastFieldset);
+                }
             }
         }
 

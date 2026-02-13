@@ -26,8 +26,9 @@ function local_alx_cdn_scorm_coursemodule_data_preprocessing(&$defaultvalues, $i
     
     if ($record) {
         error_log('ALX CDN DEBUG: Found existing record - enabled: ' . $record->enabled . ', url: ' . $record->cdnurl);
-        $defaultvalues['alx_cdn_enabled'] = $record->enabled;
-        $defaultvalues['alx_cdn_url'] = $record->cdnurl;
+        $defaultvalues['local_alx_cdn_enable'] = $record->enabled;
+        $defaultvalues['local_alx_cdn_url'] = $record->cdnurl;
+        $defaultvalues['local_alx_player_height'] = isset($record->playerheight) ? $record->playerheight : 'auto';
     } else {
         error_log('ALX CDN DEBUG: No existing record found for scormid: ' . $instance->id);
     }
@@ -72,8 +73,9 @@ function local_alx_cdn_scorm_coursemodule_edit_post_actions($data, $course) {
     
     $record = new \stdClass();
     $record->scormid = $scormid;
-    $record->enabled = isset($data->local_alx_cdn_enable) ? $data->local_alx_cdn_enable : 0;  // FIXED FIELD NAME
-    $record->cdnurl = isset($data->local_alx_cdn_url) ? trim($data->local_alx_cdn_url) : '';  // FIXED FIELD NAME
+    $record->enabled = isset($data->local_alx_cdn_enable) ? $data->local_alx_cdn_enable : 0;
+    $record->cdnurl = isset($data->local_alx_cdn_url) ? trim($data->local_alx_cdn_url) : '';
+    $record->playerheight = isset($data->local_alx_player_height) ? $data->local_alx_player_height : 'auto';
     $record->timecreated = time();
     $record->timemodified = time();
     

@@ -262,7 +262,9 @@ if ($result->prerequisites) {
             'currentorg' => $currentorg,
             'scormauto' => $scorm->auto,
             'masteryoverride' => $scorm->masteryoverride,
-            'hidetoc' => $scorm->hidetoc
+            'hidetoc' => $scorm->hidetoc,
+            'playerheight' => isset($cdn_record->playerheight) ? $cdn_record->playerheight : 'auto',
+            'is_auto' => (!isset($cdn_record->playerheight) || $cdn_record->playerheight === 'auto')
         ];
         
         echo $OUTPUT->render_from_template('local_alx_cdn_scorm/player_embed', $template_data);

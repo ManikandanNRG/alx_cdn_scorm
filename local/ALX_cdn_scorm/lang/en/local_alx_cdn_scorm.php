@@ -17,3 +17,7 @@ $string['timeout_desc'] = 'Timeout in seconds for external requests (if any).';
 $string['debugmode'] = 'Debug Mode';
 $string['debugmode_desc'] = 'Enable verbose logging in the browser console.';
 $string['error_domain_not_allowed'] = 'The CDN domain ($a) is not allowed by the administrator.';
+$string['player_settings'] = 'ALX Player Dimensions';
+$string['player_height'] = 'Player Height';
+$string['player_height_help'] = 'Select how the player height should be calculated. Auto will fit the browser window.';
+$string['height_auto'] = 'Fit to Window (Auto)';

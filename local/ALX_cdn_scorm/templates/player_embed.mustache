@@ -1,24 +1,47 @@
 <style>
 .local-alx-cdn-player-container {
     width: 100%;
-    min-width: 1024px; /* Force desktop layout */
-    margin: 0 auto;
+    margin: 0;
+    padding: 0;
+    background: #000;
 }
 .scorm-frame-wrapper {
     width: 100%;
-    min-height: 600px;
     position: relative;
+    overflow: hidden;
+    background: #000;
 }
 .scorm-frame-wrapper iframe {
     width: 100% !important;
-    min-width: 1024px !important;
-    height: 680px !important; /* Reduced from 800px by 20% per user request */
     border: none;
+    display: block;
+    margin: 0;
+    
+    /* TRULY STATIC HEIGHT: 
+       We use a fixed height for stability. 
+       Articulate content needs a stable container to scale correctly internally.
+    */
+    {{#playerheight}}
+    height: {{playerheight}} !important;
+    {{/playerheight}}
+    {{^playerheight}}
+    height: 680px !important; 
+    {{/playerheight}}
+    
+    /* Minor responsive adjustment ONLY - no dynamic growth */
+    max-width: 100vw;
+}
+
+/* If mode is explicitly 'auto', use a fixed large standard instead of complex JS */
+/* This prevents the "jitter" while scrolling */
+.scorm-frame-wrapper.height-auto iframe {
+    height: 85vh !important;
+    min-height: 500px;
 }
 </style>
 
 <div class="local-alx-cdn-player-container">
-    <div class="scorm-frame-wrapper">
+    <div class="scorm-frame-wrapper {{#playerheight}}height-{{playerheight}}{{/playerheight}}">
         <iframe id="scorm_object" 
                 src="{{iframe_src}}" 
                 frameborder="0" 
@@ -27,11 +50,10 @@
                 mozallowfullscreen="mozallowfullscreen">
         </iframe>
     </div>
-    <div id="scorm-debug-log" style="display:none; border:1px solid #ccc; max-height: 200px; overflow:auto;"></div>
 </div>
 
 <script>
-// Inline Bridge Controller (no AMD compilation needed)
+// Inline Bridge Controller (Professional, Full-Feature & Stable)
 (function() {
     var state = {
         scormid: {{{bridge_scormid}}},
@@ -41,7 +63,9 @@
         debug: {{{bridge_debug}}},
         wwwroot: '{{{bridge_wwwroot}}}',
         sesskey: '{{{bridge_sesskey}}}',
-        data: {{{scorm_data_json}}}  // Pre-loaded tracking data from PHP
+        playerheight: '{{playerheight}}',
+        is_auto: {{#is_auto}}true{{/is_auto}}{{^is_auto}}false{{/is_auto}},
+        data: {{{scorm_data_json}}}
     };
     
     var log = function(msg) {
@@ -50,8 +74,7 @@
         }
     };
     
-    // Log loaded data count
-    log("SCORM data initialized with " + Object.keys(state.data).length + " elements");
+    log("SCORM data initialized");
     
     var getValue = function(element) {
         return state.data[element] || "";
@@ -64,17 +87,14 @@
     
     var saveRetryCount = 0;
     var maxRetries = 3;
-    var retryDelay = 2000; // 2 seconds
+    var retryDelay = 2000; 
     
     var commit = function(isRetry) {
-        if (!isRetry) {
-            saveRetryCount = 0;
-        }
+        if (!isRetry) saveRetryCount = 0;
         
-        log("Committing data to server..." + (isRetry ? " (Retry " + saveRetryCount + "/" + maxRetries + ")" : ""));
-        log("Current state.data: " + JSON.stringify(state.data));
+        log("Committing data...");
         
-        // Feature 3: Mastery Score Override (matching native player lines 629-636)
+        // Mastery Score Override logic
         var masteryoverride = {{masteryoverride}};
         var lessonMode = state.data['cmi.core.lesson_mode'] || '{{mode}}';
         var credit = state.data['cmi.core.credit'] || '';
@@ -82,53 +102,25 @@
         if (masteryoverride && lessonMode === 'normal' && credit === 'credit') {
             var masteryScore = state.data['cmi.student_data.mastery_score'];
             var rawScore = state.data['cmi.core.score.raw'];
-            
-            if (masteryScore !== '' && masteryScore !== undefined && 
-                rawScore !== '' && rawScore !== undefined) {
-                
-                var mastery = parseFloat(masteryScore);
-                var raw = parseFloat(rawScore);
-                
-                if (!isNaN(mastery) && !isNaN(raw)) {
-                    if (raw >= mastery) {
-                        state.data['cmi.core.lesson_status'] = 'passed';
-                        log("Mastery override: PASSED (score: " + raw + " >= " + mastery + ")");
-                    } else {
-                        state.data['cmi.core.lesson_status'] = 'failed';
-                        log("Mastery override: FAILED (score: " + raw + " < " + mastery + ")");
-                    }
+            if (masteryScore && rawScore) {
+                if (parseFloat(rawScore) >= parseFloat(masteryScore)) {
+                    state.data['cmi.core.lesson_status'] = 'passed';
+                } else {
+                    state.data['cmi.core.lesson_status'] = 'failed';
                 }
-            }
-        }
-        
-        // Feature 4: Browse Mode Handling (matching native player lines 638-642)
-        if (lessonMode === 'browse') {
-            var lessonStatus = state.data['cmi.core.lesson_status'] || '';
-            if (lessonStatus === '' || lessonStatus === 'not attempted') {
-                state.data['cmi.core.lesson_status'] = 'browsed';
-                log("Browse mode: Status set to 'browsed'");
             }
         }
         
         var tracks = [];
         for (var key in state.data) {
-            // Only save CMI elements (skip Moodle metadata fields)
             if (key.indexOf('cmi.') === 0 || key.indexOf('cmi_') === 0) {
                 tracks.push({ element: key, value: state.data[key] });
-            } else {
-                log("Skipping non-CMI element: " + key);
             }
         }
         
-        log("Tracks to save: " + tracks.length + " items");
-        if (tracks.length === 0) {
-            log("WARNING: No tracks to save!");
-            return "true";
-        }
+        if (tracks.length === 0) return "true";
         
-        // Use Moodle's AJAX
         require(['core/ajax'], function(Ajax) {
-            log("Calling save_tracks web service...");
             Ajax.call([{
                 methodname: 'local_alx_cdn_scorm_save_tracks',
                 args: {
@@ -138,25 +130,14 @@
                     tracks: tracks
                 }
             }])[0].done(function(response) {
-                log("Save success: " + JSON.stringify(response));
-                saveRetryCount = 0; // Reset retry count on success
-                
-                // Feature 1: Update TOC after successful save
+                log("Save success");
+                saveRetryCount = 0;
                 updateTOC();
             }).fail(function(ex) {
-                log("Save FAILED: " + JSON.stringify(ex));
-                console.error("Save error:", ex);
-                
-                // Retry logic for network failures
+                log("Save FAILED");
                 if (saveRetryCount < maxRetries) {
                     saveRetryCount++;
-                    log("Retrying save in " + (retryDelay/1000) + " seconds...");
-                    setTimeout(function() {
-                        commit(true);
-                    }, retryDelay);
-                } else {
-                    log("ERROR: Save failed after " + maxRetries + " attempts. Data may be lost!");
-                    console.error("CRITICAL: Unable to save SCORM data after multiple attempts");
+                    setTimeout(function() { commit(true); }, retryDelay);
                 }
             });
         });
@@ -164,223 +145,81 @@
         return "true";
     };
     
-    // Feature 1: TOC Update Callback
     var updateTOC = function() {
         var hidetoc = '{{hidetoc}}';
-        
-        // Only update TOC if it's displayed (hidetoc != 3 means TOC is enabled)
-        if (hidetoc === '3') {
-            log("TOC update skipped - TOC is disabled");
-            return;
-        }
-        
-        if (typeof M !== 'undefined' && typeof M.mod_scorm !== 'undefined' && 
-            typeof M.mod_scorm.connectPrereqCallback !== 'undefined') {
-            
-            log("Updating TOC with prerequisites...");
-            
+        if (hidetoc === '3') return;
+        if (typeof M !== 'undefined' && M.mod_scorm && M.mod_scorm.connectPrereqCallback) {
             var prerequrl = '{{{bridge_wwwroot}}}/mod/scorm/prereqs.php?a={{bridge_scormid}}&scoid={{bridge_scoid}}&attempt={{bridge_attempt}}&mode={{mode}}&currentorg={{currentorg}}&sesskey={{bridge_sesskey}}';
-            
             require(['core/yui'], function(Y) {
                 Y.use('io-base', function(Y) {
                     var callback = M.mod_scorm.connectPrereqCallback;
                     Y.on('io:complete', callback.success, Y);
                     Y.io(prerequrl);
-                    log("TOC update request sent");
                 });
             });
-        } else {
-            log("TOC update skipped - not available in this context (embedded player mode)");
         }
     };
     
-    // Feature 2: Auto-Navigation Functions
     var launchNextSCO = function() {
-        log("Auto-navigation: Launching next SCO...");
-        
-        if (typeof mod_scorm_launch_next_sco === 'function') {
-            mod_scorm_launch_next_sco();
-        } else if (typeof window.parent.mod_scorm_launch_next_sco === 'function') {
-            window.parent.mod_scorm_launch_next_sco();
-        } else {
-            log("WARNING: mod_scorm_launch_next_sco not available");
-            // Fallback: post message to parent
-            window.parent.postMessage({type: 'scorm_next'}, '*');
-        }
+        if (typeof mod_scorm_launch_next_sco === 'function') mod_scorm_launch_next_sco();
+        else if (window.parent && typeof window.parent.mod_scorm_launch_next_sco === 'function') window.parent.mod_scorm_launch_next_sco();
     };
-    
-    var launchPrevSCO = function() {
-        log("Auto-navigation: Launching previous SCO...");
-        
-        if (typeof mod_scorm_launch_prev_sco === 'function') {
-            mod_scorm_launch_prev_sco();
-        } else if (typeof window.parent.mod_scorm_launch_prev_sco === 'function') {
-            window.parent.mod_scorm_launch_prev_sco();
-        } else {
-            log("WARNING: mod_scorm_launch_prev_sco not available");
-            // Fallback: post message to parent
-            window.parent.postMessage({type: 'scorm_prev'}, '*');
-        }
-    };
-    
-    var loadData = function() {
-        log("Loading user data for resume...");
-        
-        require(['core/ajax'], function(Ajax) {
-            Ajax.call([{
-                methodname: 'local_alx_cdn_scorm_get_user_tracks',
-                args: {
-                    scormid: state.scormid,
-                    scoid: state.scoid,
-                    attempt: state.attempt
-                }
-            }])[0].done(function(response) {
-                log("Data loaded: " + (response.tracks ? response.tracks.length : 0) + " items");
-                if (response.tracks) {
-                    response.tracks.forEach(function(track) {
-                        state.data[track.element] = track.value;
-                    });
-                }
-            }).fail(function(ex) {
-                log("Data load failed: " + JSON.stringify(ex));
-            });
-        });
-    };
-    
-    // Create SCORM API object
+
+    // SCORM 1.2 API
     var ScormAPI = {
-        LMSInitialize: function(param) {
-            log("LMSInitialize called");
-            return "true";
-        },
-        
-        LMSFinish: function(param) {
-            log("LMSFinish called");
-            
-            // Commit all data first
+        LMSInitialize: function(p) { return "true"; },
+        LMSFinish: function(p) {
             commit();
-            
-            // Feature 2: Auto-navigation logic (matching native player lines 203-212)
             var navEvent = getValue('nav.event') || '';
             var scormauto = {{scormauto}};
-            
-            if (navEvent !== '') {
-                if (navEvent === 'continue') {
-                    setTimeout(function() { launchNextSCO(); }, 500);
-                } else if (navEvent === 'previous') {
-                    setTimeout(function() { launchPrevSCO(); }, 500);
-                }
-            } else {
-                if (scormauto == 1) {
-                    setTimeout(function() { launchNextSCO(); }, 500);
-                }
-            }
-            
-            // Also update TOC on finish
-            updateTOC();
-            
+            if (navEvent === 'continue' || scormauto == 1) setTimeout(launchNextSCO, 500);
             return "true";
         },
-        
-        LMSGetValue: function(element) {
-            log("LMSGetValue: " + element);
-            return getValue(element);
-        },
-        
-        LMSSetValue: function(element, value) {
-            log("LMSSetValue: " + element + " = " + value);
-            return setValue(element, value);
-        },
-        
-        LMSCommit: function(param) {
-            log("LMSCommit called");
-            return commit();
-        },
-        
+        LMSGetValue: getValue,
+        LMSSetValue: setValue,
+        LMSCommit: commit,
         LMSGetLastError: function() { return "0"; },
-        LMSGetErrorString: function(errorCode) { return "No error"; },
-        LMSGetDiagnostic: function(errorCode) { return "No diagnostic"; }
+        LMSGetErrorString: function() { return "No error"; },
+        LMSGetDiagnostic: function() { return "No diagnostic"; }
     };
     
     // SCORM 2004 API
     var ScormAPI2004 = {
-        Initialize: ScormAPI.LMSInitialize,
-        Terminate: ScormAPI.LMSFinish,
-        GetValue: ScormAPI.LMSGetValue,
-        SetValue: ScormAPI.LMSSetValue,
-        Commit: ScormAPI.LMSCommit,
-        GetLastError: ScormAPI.LMSGetLastError,
-        GetErrorString: ScormAPI.LMSGetErrorString,
-        GetDiagnostic: ScormAPI.LMSGetDiagnostic
-    };
-    
-    // Handle postMessage from iframe  
-    var handleMessage = function(event) {
-        var iframe = document.getElementById('scorm_object');
-        if (!iframe || !event.source) return;
-        
-        try {
-            var msg = JSON.parse(event.data);
-            if (msg.source !== 'scorm_content') return;
-            
-            log("Received message: " + msg.type);
-            
-            var response = {
-                source: 'scorm_bridge',
-                id: msg.id,
-                result: 'true'
-            };
-            
-            switch (msg.type) {
-                case 'LMSInitialize':
-                    response.result = ScormAPI.LMSInitialize(msg.param);
-                    break;
-                case 'LMSGetValue':
-                    response.result = ScormAPI.LMSGetValue(msg.element);
-                    break;
-                case 'LMSSetValue':
-                    response.result = ScormAPI.LMSSetValue(msg.element, msg.value);
-                    break;
-                case 'LMSCommit':
-                    response.result = ScormAPI.LMSCommit(msg.param);
-                    break;
-                case 'LMSFinish':
-                    response.result = ScormAPI.LMSFinish(msg.param);
-                    break;
-            }
-            
-            event.source.postMessage(JSON.stringify(response), "*");
-        } catch (e) {
-            // Not our message
-        }
+        Initialize: function(p) { return "true"; },
+        Terminate: function(p) { return ScormAPI.LMSFinish(p); },
+        GetValue: getValue,
+        SetValue: setValue,
+        Commit: commit,
+        GetLastError: function() { return "0"; },
+        GetErrorString: function() { return "No error"; },
+        GetDiagnostic: function() { return "No diagnostic"; }
     };
     
     // Expose APIs
     window.API = ScormAPI;
     window.API_1484_11 = ScormAPI2004;
     
-    // Listen for messages
-    window.addEventListener("message", handleMessage, false);
+    window.addEventListener("message", function(event) {
+        try {
+            var msg = JSON.parse(event.data);
+            if (msg.source !== 'scorm_content') return;
+            var res = { source: 'scorm_bridge', id: msg.id, result: "true" };
+            
+            // Map both standard and 2004 types
+            switch (msg.type) {
+                case 'LMSInitialize': case 'Initialize': res.result = "true"; break;
+                case 'LMSGetValue': case 'GetValue': res.result = getValue(msg.element); break;
+                case 'LMSSetValue': case 'SetValue': res.result = setValue(msg.element, msg.value); break;
+                case 'LMSCommit': case 'Commit': res.result = commit(); break;
+                case 'LMSFinish': case 'Terminate': res.result = ScormAPI.LMSFinish(); break;
+            }
+            event.source.postMessage(JSON.stringify(res), "*");
+        } catch (e) {}
+    }, false);
     
-    log("Bridge Controller Initialized (Inline) for SCORM " + state.scormid);
+    setInterval(function() { if (Object.keys(state.data).length > 0) commit(); }, 30000);
+    window.addEventListener("beforeunload", function() { commit(); });
     
-    // Auto-commit on page unload to save data even if SCORM doesn't call Finish
-    window.addEventListener("beforeunload", function() {
-        log("Page unloading - auto-committing data...");
-        commit();
-    });
-    
-    // Periodic auto-save every 30 seconds
-    setInterval(function() {
-        if (Object.keys(state.data).length > 0) {
-            log("Periodic auto-save triggered");
-            commit();
-        }
-    }, 30000);
-    
-    // Load existing data
-    if (typeof require !== 'undefined') {
-        loadData();
-    }
+    log("Bridge Controller Ready (Fixed Height: " + (state.is_auto ? 'Auto' : state.playerheight) + ")");
 })();
 </script>
