@@ -1,0 +1,19 @@
+# System files
+.DS_Store
+Thumbs.db
+
+# Backup and legacy files
+*_old.php
+old_player_ref.php
+api_proxy.html
+doc/old/
+
+# Archives and logs
+*.zip
+*.rar
+*.log
+*.tmp
+
+# Moodle specific
+/vendor/
+/node_modules/
