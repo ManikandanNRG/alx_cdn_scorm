@@ -62,7 +62,8 @@ $attempt = optional_param('attempt', 1, PARAM_INT);
 $debugmode = get_config('local_alx_cdn_scorm', 'debugmode');
 
 // Create the API injection script with Service Worker registration
-$sw_url = $CFG->wwwroot . '/local/alx_cdn_scorm/sw.js';
+// Use root-relative path for IOMAD/Multi-domain support
+$sw_url = '/local/alx_cdn_scorm/sw.js';
 $cdn_base_json = json_encode($base_url);
 $moodle_base_json = json_encode($CFG->wwwroot);
 
